@@ -1,27 +1,35 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from ..controllers.inventory_service import get_products, create_product, update_product, delete_product
-from ..models.product import Product
-from ..config.settings import settings
-from ..middleware.auth_middleware import get_current_user
+from ..services.inventory_service import InventoryService
+from ..schemas.product import ProductCreate, ProductUpdate, Product
+from ..database import get_db
 
 router = APIRouter()
 
-@router.get("/")
+@router.get("/", response_model=list[Product])
 def read_products(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    products = get_products(db, skip=skip, limit=limit)
+    service = InventoryService(db)
+    # For now, return all products - in production, add pagination
+    products = db.query(Product).offset(skip).limit(limit).all()
     return products
 
-@router.post("/")
-def create_new_product(product: Product, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return create_product(db=db, product=product)
+@router.post("/", response_model=Product)
+def create_product(product: ProductCreate, db: Session = Depends(get_db)):
+    service = InventoryService(db)
+    return service.create_product(product)
 
-@router.put("/{product_id}")
-def update_existing_product(product_id: int, product: Product, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return update_product(db=db, product_id=product_id, product=product)
+@router.get("/{product_id}", response_model=Product)
+def read_product(product_id: str, db: Session = Depends(get_db)):
+    service = InventoryService(db)
+    db_product = service.get_product(product_id)
+    if db_product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return db_product
 
-@router.delete("/{product_id}")
-def delete_existing_product(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return delete_product(db=db, product_id=product_id)
-
-# Note: get_db function needs to be defined, probably in a database session utility
+@router.put("/{product_id}", response_model=Product)
+def update_product(product_id: str, product: ProductUpdate, db: Session = Depends(get_db)):
+    service = InventoryService(db)
+    db_product = service.update_product(product_id, product)
+    if db_product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return db_product

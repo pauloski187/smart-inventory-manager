@@ -1,6 +1,6 @@
 # Smart Inventory Manager
 
-A full-stack inventory management application for small businesses.
+A comprehensive inventory management system for small businesses with real-time tracking, analytics, and demand forecasting capabilities.
 
 ## Project Structure
 
