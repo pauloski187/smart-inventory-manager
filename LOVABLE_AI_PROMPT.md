@@ -721,5 +721,92 @@ Build in this order for best workflow:
 
 ---
 
+## REAL-TIME STREAMING (NEW - v2.1.0)
+
+### WebSocket Connection
+The backend now supports real-time updates via WebSocket connections.
+
+**WebSocket Endpoint**: `ws://localhost:8000/stream/ws`
+
+### Available Channels
+Subscribe to specific event channels:
+- `all` - Receive all events (default)
+- `orders` - Order-related events
+- `stock` - Stock level changes
+- `alerts` - Alert notifications
+- `forecasts` - Forecast updates
+- `analytics` - Analytics summaries
+
+### Connection Example
+```javascript
+// Connect to WebSocket
+const ws = new WebSocket('ws://localhost:8000/stream/ws?channels=orders,alerts&client_id=dashboard');
+
+ws.onopen = () => {
+  console.log('Connected to inventory stream');
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  switch(data.type) {
+    case 'connected':
+      console.log('Subscribed to channels:', data.channels);
+      break;
+    case 'event':
+      handleInventoryEvent(data);
+      break;
+    case 'alert':
+      showAlertNotification(data);
+      break;
+    case 'stock_update':
+      updateStockDisplay(data);
+      break;
+  }
+};
+
+// Subscribe to additional channel
+ws.send(JSON.stringify({ action: 'subscribe', channel: 'stock' }));
+
+// Unsubscribe from channel
+ws.send(JSON.stringify({ action: 'unsubscribe', channel: 'forecasts' }));
+```
+
+### Event Types
+| Event | Description |
+|-------|-------------|
+| `order.created` | New order placed |
+| `order.delivered` | Order delivered |
+| `stock.updated` | Stock level changed |
+| `stock.low` | Stock fell below threshold |
+| `stock.out` | Product out of stock |
+| `alert.low_stock` | Low stock warning |
+| `alert.dead_stock` | Dead stock detected |
+| `forecast.generated` | New forecast available |
+
+### Streaming Endpoints
+| Endpoint | Description |
+|----------|-------------|
+| `WS /stream/ws` | WebSocket for real-time events |
+| `GET /stream/events` | Server-Sent Events (SSE alternative) |
+| `GET /stream/status` | Connection status and stats |
+| `POST /stream/broadcast/alert` | Broadcast alert to clients |
+| `POST /stream/test/emit-event` | Test event emission |
+
+### Dashboard Real-time Features
+- **Live stock updates** - Show stock changes as they happen
+- **Alert notifications** - Toast notifications for critical alerts
+- **Order feed** - Real-time order activity stream
+- **Connection indicator** - Show WebSocket connection status
+
+### Implementation Notes
+- Reconnect automatically on disconnect (exponential backoff)
+- Buffer messages during reconnection
+- Show connection status indicator in UI
+- Handle both WebSocket and SSE for fallback
+
+---
+
 *Prompt updated: December 25, 2024*
-*New features: Monthly trends, reports, product/category performance, recommendations*
+*Version: 2.1.0*
+*New features: Monthly trends, reports, product/category performance, recommendations, real-time streaming via Kafka/WebSocket*

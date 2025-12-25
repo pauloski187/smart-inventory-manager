@@ -3,6 +3,11 @@ SARIMA Demand Forecasting Module
 
 Production-ready SARIMA model for category-level demand forecasting.
 Implements time series analysis with seasonal patterns.
+
+Enhanced with:
+- Weekly resampling for more stable forecasts
+- Log transformation to handle variance and improve SMAPE
+- Automatic back-transformation for interpretable results
 """
 
 import pandas as pd
@@ -32,21 +37,47 @@ class SARIMAForecaster:
     Production-ready SARIMA forecaster for demand prediction.
 
     SARIMA(p,d,q)(P,D,Q,s) model with weekly seasonality.
+    Uses log transformation and weekly aggregation for improved accuracy.
 
     Attributes:
-        seasonal_period: Seasonality period (7 for weekly)
+        seasonal_period: Seasonality period (52 for weekly data = yearly)
         order: Non-seasonal ARIMA order (p,d,q)
         seasonal_order: Seasonal order (P,D,Q,s)
+        use_log_transform: Whether to apply log1p transformation
+        resample_freq: Resampling frequency ('W' for weekly, 'D' for daily)
     """
 
-    def __init__(self, seasonal_period: int = 7):
-        """Initialize forecaster with default weekly seasonality."""
+    def __init__(self, seasonal_period: int = 52, use_log_transform: bool = True,
+                 resample_freq: str = 'W'):
+        """
+        Initialize forecaster with weekly resampling and log transform.
+
+        Args:
+            seasonal_period: Seasonality period (52 for weekly = yearly cycle)
+            use_log_transform: Apply log1p transformation (recommended)
+            resample_freq: 'W' for weekly, 'D' for daily
+        """
         self.seasonal_period = seasonal_period
         self.order = (1, 1, 1)  # Default ARIMA order
         self.seasonal_order = (1, 1, 1, seasonal_period)
         self.model = None
         self.fitted_model = None
         self.category = None
+        self.use_log_transform = use_log_transform
+        self.resample_freq = resample_freq
+        self._train_mean = None  # For back-transformation scaling
+
+    def _apply_log_transform(self, data: pd.Series) -> pd.Series:
+        """Apply log1p transformation to stabilize variance."""
+        if self.use_log_transform:
+            return np.log1p(data)
+        return data
+
+    def _inverse_log_transform(self, data: pd.Series) -> pd.Series:
+        """Inverse log1p transformation to get original scale."""
+        if self.use_log_transform:
+            return np.expm1(data)
+        return data
 
     def fit(self, data: pd.Series, order: Tuple = None,
             seasonal_order: Tuple = None) -> 'SARIMAForecaster':
@@ -56,7 +87,7 @@ class SARIMAForecaster:
         Args:
             data: Time series with DatetimeIndex
             order: ARIMA order (p,d,q), default (1,1,1)
-            seasonal_order: Seasonal order (P,D,Q,s), default (1,1,1,7)
+            seasonal_order: Seasonal order (P,D,Q,s), default (1,1,1,52)
 
         Returns:
             Self for method chaining
@@ -66,16 +97,23 @@ class SARIMAForecaster:
         if seasonal_order:
             self.seasonal_order = seasonal_order
 
+        # Store mean for potential back-transformation
+        self._train_mean = data.mean()
+
+        # Apply log transformation
+        transformed_data = self._apply_log_transform(data)
+
         try:
             self.model = SARIMAX(
-                data,
+                transformed_data,
                 order=self.order,
                 seasonal_order=self.seasonal_order,
                 enforce_stationarity=False,
                 enforce_invertibility=False
             )
             self.fitted_model = self.model.fit(disp=False, maxiter=200)
-            logger.info(f"SARIMA model fitted: AIC={self.fitted_model.aic:.2f}")
+            logger.info(f"SARIMA model fitted: AIC={self.fitted_model.aic:.2f}, "
+                       f"Log transform={self.use_log_transform}")
         except Exception as e:
             logger.error(f"Error fitting SARIMA: {e}")
             raise
@@ -91,7 +129,7 @@ class SARIMAForecaster:
             alpha: Significance level for CI (default 5%)
 
         Returns:
-            DataFrame with Forecast, Lower_CI, Upper_CI columns
+            DataFrame with Forecast, Lower_CI, Upper_CI columns (back-transformed)
         """
         if self.fitted_model is None:
             raise ValueError("Model must be fitted before forecasting")
@@ -100,11 +138,17 @@ class SARIMAForecaster:
         forecast_mean = forecast_result.predicted_mean
         conf_int = forecast_result.conf_int(alpha=alpha)
 
+        # Create DataFrame with log-scale values
         forecast_df = pd.DataFrame({
             'Forecast': forecast_mean.values,
             'Lower_CI': conf_int.iloc[:, 0].values,
             'Upper_CI': conf_int.iloc[:, 1].values
         }, index=forecast_mean.index)
+
+        # Back-transform from log scale
+        forecast_df['Forecast'] = self._inverse_log_transform(forecast_df['Forecast'])
+        forecast_df['Lower_CI'] = self._inverse_log_transform(forecast_df['Lower_CI'])
+        forecast_df['Upper_CI'] = self._inverse_log_transform(forecast_df['Upper_CI'])
 
         # Demand cannot be negative
         forecast_df['Forecast'] = forecast_df['Forecast'].clip(lower=0)
@@ -114,10 +158,10 @@ class SARIMAForecaster:
 
     def evaluate(self, test_data: pd.Series) -> Dict[str, float]:
         """
-        Evaluate model performance on test data.
+        Evaluate model performance on test data (back-transformed).
 
         Args:
-            test_data: Actual test values
+            test_data: Actual test values (original scale)
 
         Returns:
             Dictionary with MAE, RMSE, MAPE, SMAPE metrics
@@ -129,9 +173,17 @@ class SARIMAForecaster:
         mae = mean_absolute_error(actual, predictions)
         rmse = np.sqrt(mean_squared_error(actual, predictions))
 
-        # SMAPE (handles zeros better)
-        smape = np.mean(2 * np.abs(actual - predictions) /
-                       (np.abs(actual) + np.abs(predictions) + 1)) * 100
+        # SMAPE (handles zeros better) - improved calculation
+        denominator = np.abs(actual) + np.abs(predictions)
+        # Avoid division by zero
+        non_zero_mask = denominator > 0
+        if non_zero_mask.sum() > 0:
+            smape = np.mean(
+                2 * np.abs(actual[non_zero_mask] - predictions[non_zero_mask]) /
+                denominator[non_zero_mask]
+            ) * 100
+        else:
+            smape = 0.0
 
         # MAPE excluding zeros
         mask = actual > 0
@@ -178,7 +230,10 @@ class SARIMAForecaster:
                 'fitted_model': self.fitted_model,
                 'order': self.order,
                 'seasonal_order': self.seasonal_order,
-                'category': self.category
+                'category': self.category,
+                'use_log_transform': self.use_log_transform,
+                'resample_freq': self.resample_freq,
+                '_train_mean': self._train_mean
             }, f)
         logger.info(f"Model saved to {filepath}")
 
@@ -192,6 +247,9 @@ class SARIMAForecaster:
         forecaster.order = data['order']
         forecaster.seasonal_order = data['seasonal_order']
         forecaster.category = data.get('category')
+        forecaster.use_log_transform = data.get('use_log_transform', True)
+        forecaster.resample_freq = data.get('resample_freq', 'W')
+        forecaster._train_mean = data.get('_train_mean')
         return forecaster
 
 
@@ -201,32 +259,45 @@ class CategoryForecaster:
 
     Handles data preparation, model training, and forecasting
     for product categories.
+
+    Enhanced with:
+    - Weekly resampling for more stable time series
+    - Log transformation support
+    - Filtering of negative/zero values
     """
 
-    def __init__(self, df: pd.DataFrame = None):
+    def __init__(self, df: pd.DataFrame = None, resample_freq: str = 'W',
+                 use_log_transform: bool = True):
         """
         Initialize with order data.
 
         Args:
             df: DataFrame with OrderDate, Quantity, Category columns
+            resample_freq: 'W' for weekly (recommended), 'D' for daily
+            use_log_transform: Apply log1p transformation for better SMAPE
         """
         self.df = df
         self.models: Dict[str, SARIMAForecaster] = {}
         self.forecasts: Dict[str, pd.DataFrame] = {}
+        self.resample_freq = resample_freq
+        self.use_log_transform = use_log_transform
 
-    def prepare_category_data(self, category: str) -> pd.Series:
+    def prepare_category_data(self, category: str,
+                              resample_freq: str = None) -> pd.Series:
         """
-        Prepare daily demand time series for a category.
+        Prepare demand time series for a category with weekly resampling.
 
         Args:
             category: Category name
+            resample_freq: Override default resampling frequency
 
         Returns:
-            Series with daily demand indexed by date
+            Series with demand indexed by period (weekly or daily)
         """
         if self.df is None:
             raise ValueError("No data loaded")
 
+        freq = resample_freq or self.resample_freq
         cat_df = self.df[self.df['Category'] == category].copy()
 
         if 'OrderDate' in cat_df.columns:
@@ -238,8 +309,19 @@ class CategoryForecaster:
 
         cat_df[date_col] = pd.to_datetime(cat_df[date_col])
 
+        # Get quantity and amount columns
         qty_col = 'Quantity' if 'Quantity' in cat_df.columns else 'quantity'
+        amt_col = 'TotalAmount' if 'TotalAmount' in cat_df.columns else 'total_amount'
 
+        # Filter out negative and zero values from TotalAmount if it exists
+        if amt_col in cat_df.columns:
+            cat_df = cat_df[cat_df[amt_col] > 0]
+            logger.info(f"Filtered to {len(cat_df)} rows with positive TotalAmount for {category}")
+
+        # Also filter negative quantities
+        cat_df = cat_df[cat_df[qty_col] > 0]
+
+        # Create daily series first
         daily = cat_df.groupby(cat_df[date_col].dt.date)[qty_col].sum()
         daily.index = pd.to_datetime(daily.index)
 
@@ -250,9 +332,16 @@ class CategoryForecaster:
             freq='D'
         )
         daily = daily.reindex(date_range, fill_value=0)
-        daily.name = 'Quantity'
 
-        return daily
+        # Resample to weekly if specified
+        if freq == 'W':
+            weekly = daily.resample('W').sum()
+            weekly.name = 'Quantity'
+            logger.info(f"Resampled {category} to {len(weekly)} weekly observations")
+            return weekly
+        else:
+            daily.name = 'Quantity'
+            return daily
 
     def check_stationarity(self, series: pd.Series) -> Dict[str, Any]:
         """
@@ -276,7 +365,7 @@ class CategoryForecaster:
     def train_category(self, category: str,
                        train_ratio: float = 0.8) -> Dict[str, Any]:
         """
-        Train SARIMA model for a category.
+        Train SARIMA model for a category with weekly resampling and log transform.
 
         Args:
             category: Category name
@@ -292,12 +381,36 @@ class CategoryForecaster:
         train = data[:split_idx]
         test = data[split_idx:]
 
-        # Train model
-        forecaster = SARIMAForecaster(seasonal_period=7)
-        forecaster.category = category
-        forecaster.fit(train)
+        # Determine seasonal period based on resampling frequency
+        # For weekly data: 52 weeks = 1 year cycle
+        # For daily data: 7 days = 1 week cycle
+        if self.resample_freq == 'W':
+            seasonal_period = 52  # Yearly seasonality for weekly data
+        else:
+            seasonal_period = 7  # Weekly seasonality for daily data
 
-        # Evaluate
+        # Train model with log transformation
+        forecaster = SARIMAForecaster(
+            seasonal_period=seasonal_period,
+            use_log_transform=self.use_log_transform,
+            resample_freq=self.resample_freq
+        )
+        forecaster.category = category
+
+        # For weekly data with yearly seasonality, use simpler seasonal order
+        # to avoid overfitting with limited data points
+        if self.resample_freq == 'W':
+            # Use (1,1,1)(1,0,1,52) for weekly - no seasonal differencing
+            # This works better when we have ~260 weeks (5 years) of data
+            forecaster.fit(
+                train,
+                order=(1, 1, 1),
+                seasonal_order=(1, 0, 1, min(seasonal_period, 52))
+            )
+        else:
+            forecaster.fit(train)
+
+        # Evaluate on test data (back-transformed automatically)
         metrics = forecaster.evaluate(test)
         diagnostics = forecaster.check_residuals()
 
@@ -312,6 +425,8 @@ class CategoryForecaster:
             'category': category,
             'train_size': len(train),
             'test_size': len(test),
+            'resample_freq': self.resample_freq,
+            'log_transform': self.use_log_transform,
             'metrics': metrics,
             'diagnostics': diagnostics,
             'model_path': str(model_path)
@@ -345,6 +460,9 @@ class CategoryForecaster:
         """
         Generate forecasts for a category.
 
+        For weekly models, horizons are interpreted as days and converted to weeks.
+        Output is always presented in daily equivalent terms for consistency.
+
         Args:
             category: Category name
             horizons: List of forecast horizons (days)
@@ -363,33 +481,68 @@ class CategoryForecaster:
 
         forecaster = self.models[category]
 
-        # Get the longest horizon forecast
-        max_horizon = max(horizons)
-        forecast_df = forecaster.forecast(steps=max_horizon)
+        # Convert day horizons to weeks if model uses weekly data
+        if forecaster.resample_freq == 'W':
+            max_weeks = max(horizons) // 7 + 1
+            forecast_df = forecaster.forecast(steps=max_weeks)
+        else:
+            max_horizon = max(horizons)
+            forecast_df = forecaster.forecast(steps=max_horizon)
 
         results = {
             'category': category,
             'generated_at': datetime.now().isoformat(),
+            'model_info': {
+                'resample_freq': forecaster.resample_freq,
+                'log_transform': forecaster.use_log_transform
+            },
             'forecasts': {}
         }
 
         for horizon in horizons:
-            horizon_forecast = forecast_df.head(horizon)
-            results['forecasts'][f'{horizon}_day'] = {
-                'total_forecast': round(horizon_forecast['Forecast'].sum(), 0),
-                'daily_average': round(horizon_forecast['Forecast'].mean(), 2),
-                'lower_ci_total': round(horizon_forecast['Lower_CI'].sum(), 0),
-                'upper_ci_total': round(horizon_forecast['Upper_CI'].sum(), 0),
-                'daily_forecast': [
-                    {
-                        'date': idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx),
-                        'forecast': round(row['Forecast'], 2),
-                        'lower_ci': round(row['Lower_CI'], 2),
-                        'upper_ci': round(row['Upper_CI'], 2)
-                    }
-                    for idx, row in horizon_forecast.iterrows()
-                ]
-            }
+            if forecaster.resample_freq == 'W':
+                # Convert days to weeks for horizon
+                weeks_needed = horizon // 7
+                horizon_forecast = forecast_df.head(weeks_needed) if weeks_needed > 0 else forecast_df.head(1)
+
+                # Calculate daily equivalents
+                total_forecast = horizon_forecast['Forecast'].sum()
+                daily_avg = total_forecast / horizon if horizon > 0 else 0
+
+                results['forecasts'][f'{horizon}_day'] = {
+                    'total_forecast': round(total_forecast, 0),
+                    'daily_average': round(daily_avg, 2),
+                    'lower_ci_total': round(horizon_forecast['Lower_CI'].sum(), 0),
+                    'upper_ci_total': round(horizon_forecast['Upper_CI'].sum(), 0),
+                    'weeks_in_forecast': len(horizon_forecast),
+                    'weekly_forecast': [
+                        {
+                            'week_ending': idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx),
+                            'forecast': round(row['Forecast'], 2),
+                            'lower_ci': round(row['Lower_CI'], 2),
+                            'upper_ci': round(row['Upper_CI'], 2),
+                            'daily_equivalent': round(row['Forecast'] / 7, 2)
+                        }
+                        for idx, row in horizon_forecast.iterrows()
+                    ]
+                }
+            else:
+                horizon_forecast = forecast_df.head(horizon)
+                results['forecasts'][f'{horizon}_day'] = {
+                    'total_forecast': round(horizon_forecast['Forecast'].sum(), 0),
+                    'daily_average': round(horizon_forecast['Forecast'].mean(), 2),
+                    'lower_ci_total': round(horizon_forecast['Lower_CI'].sum(), 0),
+                    'upper_ci_total': round(horizon_forecast['Upper_CI'].sum(), 0),
+                    'daily_forecast': [
+                        {
+                            'date': idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx),
+                            'forecast': round(row['Forecast'], 2),
+                            'lower_ci': round(row['Lower_CI'], 2),
+                            'upper_ci': round(row['Upper_CI'], 2)
+                        }
+                        for idx, row in horizon_forecast.iterrows()
+                    ]
+                }
 
         self.forecasts[category] = results
         return results
