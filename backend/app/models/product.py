@@ -1,9 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from ..database import Base
 
-Base = declarative_base()
 
 class Product(Base):
     __tablename__ = "products"
@@ -13,8 +12,12 @@ class Product(Base):
     category = Column(String)
     brand = Column(String)
     unit_price = Column(Float, nullable=False)
+    cost_price = Column(Float)  # Cost price from inventory
     current_stock = Column(Integer, default=0)
+    initial_stock = Column(Integer, default=0)
     reorder_threshold = Column(Integer, default=10)
+    reorder_quantity = Column(Integer, default=50)
+    stock_status = Column(String, default="In Stock")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

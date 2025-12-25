@@ -1,4 +1,5 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Config(BaseSettings):
     database_url: str = "sqlite:///./inventory.db"
@@ -10,7 +11,7 @@ class Config(BaseSettings):
     csv_chunk_size: int = 1000
     dead_stock_days: int = 90  # Days without sales to consider dead stock
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
+
 
 config = Config()

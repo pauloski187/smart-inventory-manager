@@ -1,9 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from ..database import Base
 
-Base = declarative_base()
 
 class Order(Base):
     __tablename__ = "orders"
@@ -19,11 +18,13 @@ class Order(Base):
     tax = Column(Float, default=0.0)
     shipping_cost = Column(Float, default=0.0)
     total_amount = Column(Float, nullable=False)
+    profit = Column(Float, default=0.0)
+    profit_margin = Column(Float, default=0.0)
     payment_method = Column(String)
     order_status = Column(String)
-    city = Column(String)
-    state = Column(String)
-    country = Column(String)
+    delivery_date = Column(DateTime)
+    returned = Column(Boolean, default=False)
+    refund_amount = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

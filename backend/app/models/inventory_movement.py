@@ -1,9 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from ..database import Base
 
-Base = declarative_base()
 
 class InventoryMovement(Base):
     __tablename__ = "inventory_movements"

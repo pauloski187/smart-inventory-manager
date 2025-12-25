@@ -1,15 +1,15 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from ..database import Base
 
-Base = declarative_base()
 
 class Customer(Base):
     __tablename__ = "customers"
 
     id = Column(String, primary_key=True)  # CustomerID from CSV
     name = Column(String, nullable=False)
+    customer_type = Column(String)  # New, Returning, VIP
     city = Column(String)
     state = Column(String)
     country = Column(String)

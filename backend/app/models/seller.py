@@ -1,9 +1,8 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from ..database import Base
 
-Base = declarative_base()
 
 class Seller(Base):
     __tablename__ = "sellers"
