@@ -6,18 +6,18 @@
 
 ## Project Overview
 
-Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides **Prophet-based demand forecasting** with **18.35% SMAPE** (verified), ABC analysis, comprehensive reporting, and inventory recommendations.
+Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides **SARIMA-based demand forecasting**, ABC analysis, comprehensive reporting, and inventory recommendations.
 
-**Forecasting API (Hugging Face Spaces)**: `https://pauloski07-sales-inventory-forecaster.hf.space`
+**Backend API Base URL**: `https://smart-inventory-manager-7kt7.onrender.com`
 **Local Development**: `http://localhost:8000`
-**API Type**: Gradio API (use @gradio/client for JavaScript integration)
+**API Documentation**: `https://smart-inventory-manager-7kt7.onrender.com/docs`
 
 ### Key ML Achievement
 | Metric | Value |
 |--------|-------|
-| **Forecast Accuracy (SMAPE)** | **18.35%** ✅ |
-| Target | <20% |
-| Model | Facebook Prophet |
+| **Forecast Model** | SARIMA (Seasonal ARIMA) |
+| **Features** | Auto seasonality, trend detection |
+| **Data** | 100k+ orders (2020-2024) |
 | Validation | 8-week holdout |
 
 ---
@@ -842,59 +842,54 @@ Display these accuracy metrics in the forecast dashboard to build user confidenc
 
 ## PRODUCTION DEPLOYMENT
 
-### Forecasting API (Hugging Face Spaces)
+### Backend API (Render.com)
 
-**Production URL**: `https://pauloski07-sales-inventory-forecaster.hf.space`
-**Space URL**: `https://huggingface.co/spaces/pauloski07/sales-inventory-forecaster`
+**Production URL**: `https://smart-inventory-manager-7kt7.onrender.com`
+**API Documentation**: `https://smart-inventory-manager-7kt7.onrender.com/docs`
 
-### Gradio API Endpoints
+### REST API Endpoints
 
-| Endpoint | Description | Parameters |
-|----------|-------------|------------|
-| `/load_dataset` | Upload CSV and train models | file (CSV) |
-| `/get_forecast` | Get forecast for category | category (string), weeks (1-52) |
-| `/get_all_forecasts` | Get all category forecasts | weeks (1-52) |
-| `/get_recommendations` | Get inventory recommendations | none |
-| `/health_check` | Check API status | none |
-| `/get_categories` | List available categories | none |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/analytics/dashboard/summary` | GET | Dashboard KPIs |
+| `/analytics/monthly-sales-trend` | GET | Revenue & profit trends |
+| `/analytics/monthly-report/{year}/{month}` | GET | Monthly report |
+| `/analytics/product-performance` | GET | Best/worst products |
+| `/analytics/category-performance` | GET | Category metrics |
+| `/analytics/abc-analysis` | GET | ABC classification |
+| `/analytics/inventory/low-stock` | GET | Low stock alerts |
+| `/analytics/inventory/dead-stock` | GET | Dead stock detection |
+| `/forecast/forecasts/all` | GET | All category forecasts |
+| `/forecast/forecast/{category}` | GET | Single category forecast |
+| `/forecast/inventory-recommendations` | GET | Reorder recommendations |
+| `/products` | GET | List all products |
+| `/orders` | GET | List all orders |
+| `/health` | GET | Health check |
 
 ### Frontend Integration (JavaScript)
 
 ```javascript
-import { Client } from "@gradio/client";
+const API_BASE_URL = 'https://smart-inventory-manager-7kt7.onrender.com';
 
-// Connect to the forecasting API
-const client = await Client.connect("pauloski07/sales-inventory-forecaster");
+// Get dashboard summary
+const response = await fetch(`${API_BASE_URL}/analytics/dashboard/summary`);
+const data = await response.json();
 
 // Get forecast for a category
-const forecast = await client.predict("/get_forecast", {
-  category: "Electronics",
-  weeks: 13
-});
-console.log(forecast.data);
+const forecast = await fetch(`${API_BASE_URL}/forecast/forecast/Electronics?include_daily=true`);
+const forecastData = await forecast.json();
 
 // Get inventory recommendations
-const recommendations = await client.predict("/get_recommendations", {});
-console.log(recommendations.data);
-
-// Get all forecasts
-const allForecasts = await client.predict("/get_all_forecasts", {
-  weeks: 13
-});
-console.log(allForecasts.data);
-```
-
-### Install Gradio Client
-```bash
-npm install @gradio/client
+const recommendations = await fetch(`${API_BASE_URL}/forecast/inventory-recommendations`);
+const recData = await recommendations.json();
 ```
 
 ### Health Check
-Call `/health_check` endpoint - returns JSON with status, version, and loaded categories count.
+`GET /health` - Returns `{"status": "healthy"}` for monitoring
 
 ---
 
 *Prompt updated: December 26, 2024*
-*Version: 3.1.0*
-*Key Update: Migrated to Hugging Face Spaces with Gradio API*
-*Features: SARIMA forecasting, inventory recommendations, category-level predictions*
+*Version: 3.2.0*
+*Deployment: Render.com with PostgreSQL*
+*Features: SARIMA forecasting, analytics dashboard, inventory recommendations*

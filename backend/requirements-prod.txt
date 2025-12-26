@@ -6,6 +6,7 @@ python-multipart==0.0.17
 # Database
 sqlalchemy==2.0.36
 alembic==1.14.0
+psycopg2-binary>=2.9.9
 
 # Authentication
 python-jose[cryptography]==3.3.0
@@ -17,7 +18,7 @@ pydantic-settings>=2.0.0
 pandas>=2.2.0
 numpy>=1.24.0
 
-# Statistics (lightweight - no Prophet/TensorFlow for free tier)
+# Machine Learning & Statistics (SARIMA)
 scikit-learn>=1.3.2
 statsmodels>=0.14.0
 scipy>=1.11.0

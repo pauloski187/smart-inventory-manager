@@ -1,13 +1,13 @@
 services:
   - type: web
     name: smart-inventory-api
-    env: python
+    runtime: python
     region: oregon
     plan: free
     branch: main
     rootDir: backend
     buildCommand: pip install -r requirements-prod.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
@@ -20,7 +20,7 @@ services:
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 30
+        value: "30"
     healthCheckPath: /health
 
 databases:
