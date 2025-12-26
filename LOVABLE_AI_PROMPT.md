@@ -8,9 +8,9 @@
 
 Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides **Prophet-based demand forecasting** with **18.35% SMAPE** (verified), ABC analysis, comprehensive reporting, and inventory recommendations.
 
-**Backend API Base URL**: `https://smart-inventory-manager-7kt7.onrender.com` (Production)
+**Forecasting API (Hugging Face Spaces)**: `https://pauloski07-sales-inventory-forecaster.hf.space`
 **Local Development**: `http://localhost:8000`
-**API Documentation**: `https://smart-inventory-manager-7kt7.onrender.com/docs`
+**API Type**: Gradio API (use @gradio/client for JavaScript integration)
 
 ### Key ML Achievement
 | Metric | Value |
@@ -842,37 +842,59 @@ Display these accuracy metrics in the forecast dashboard to build user confidenc
 
 ## PRODUCTION DEPLOYMENT
 
-### Backend Deployment (Render.com)
+### Forecasting API (Hugging Face Spaces)
 
-The FastAPI backend is deployed on Render.com:
+**Production URL**: `https://pauloski07-sales-inventory-forecaster.hf.space`
+**Space URL**: `https://huggingface.co/spaces/pauloski07/sales-inventory-forecaster`
 
-**Production URL**: `https://smart-inventory-manager-7kt7.onrender.com`
+### Gradio API Endpoints
 
-### Environment Variables (Render)
-```
-DATABASE_URL=postgresql://...
-SECRET_KEY=your-secret-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
+| Endpoint | Description | Parameters |
+|----------|-------------|------------|
+| `/load_dataset` | Upload CSV and train models | file (CSV) |
+| `/get_forecast` | Get forecast for category | category (string), weeks (1-52) |
+| `/get_all_forecasts` | Get all category forecasts | weeks (1-52) |
+| `/get_recommendations` | Get inventory recommendations | none |
+| `/health_check` | Check API status | none |
+| `/get_categories` | List available categories | none |
 
-### Frontend Deployment (Lovable/Vercel)
-
-Configure the frontend to use the production API:
+### Frontend Integration (JavaScript)
 
 ```javascript
-// config.js
-const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://smart-inventory-manager-7kt7.onrender.com'
-  : 'http://localhost:8000';
+import { Client } from "@gradio/client";
+
+// Connect to the forecasting API
+const client = await Client.connect("pauloski07/sales-inventory-forecaster");
+
+// Get forecast for a category
+const forecast = await client.predict("/get_forecast", {
+  category: "Electronics",
+  weeks: 13
+});
+console.log(forecast.data);
+
+// Get inventory recommendations
+const recommendations = await client.predict("/get_recommendations", {});
+console.log(recommendations.data);
+
+// Get all forecasts
+const allForecasts = await client.predict("/get_all_forecasts", {
+  weeks: 13
+});
+console.log(allForecasts.data);
 ```
 
-### Health Check Endpoint
-`GET /health` - Returns `{"status": "healthy"}` for monitoring
+### Install Gradio Client
+```bash
+npm install @gradio/client
+```
+
+### Health Check
+Call `/health_check` endpoint - returns JSON with status, version, and loaded categories count.
 
 ---
 
 *Prompt updated: December 26, 2024*
-*Version: 3.0.0*
-*Key Update: Prophet model achieves 18.35% SMAPE (target <20% achieved!)*
-*Features: Monthly trends, reports, product/category performance, recommendations, real-time streaming via Kafka/WebSocket*
+*Version: 3.1.0*
+*Key Update: Migrated to Hugging Face Spaces with Gradio API*
+*Features: SARIMA forecasting, inventory recommendations, category-level predictions*
