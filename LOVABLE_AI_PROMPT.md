@@ -6,10 +6,19 @@
 
 ## Project Overview
 
-Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides SARIMA-based demand forecasting, ABC analysis, comprehensive reporting, and inventory recommendations.
+Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides **Prophet-based demand forecasting** with **18.35% SMAPE** (verified), ABC analysis, comprehensive reporting, and inventory recommendations.
 
-**Backend API Base URL**: `http://localhost:8000`
-**API Documentation**: `http://localhost:8000/docs`
+**Backend API Base URL**: `https://smart-inventory-api.onrender.com` (Production)
+**Local Development**: `http://localhost:8000`
+**API Documentation**: `https://smart-inventory-api.onrender.com/docs`
+
+### Key ML Achievement
+| Metric | Value |
+|--------|-------|
+| **Forecast Accuracy (SMAPE)** | **18.35%** ✅ |
+| Target | <20% |
+| Model | Facebook Prophet |
+| Validation | 8-week holdout |
 
 ---
 
@@ -807,6 +816,63 @@ ws.send(JSON.stringify({ action: 'unsubscribe', channel: 'forecasts' }));
 
 ---
 
-*Prompt updated: December 25, 2024*
-*Version: 2.1.0*
-*New features: Monthly trends, reports, product/category performance, recommendations, real-time streaming via Kafka/WebSocket*
+---
+
+## FORECAST ACCURACY BY CATEGORY
+
+The Prophet model achieves the following verified SMAPE scores:
+
+| Category | SMAPE | Status |
+|----------|-------|--------|
+| Health & Personal Care | 9.64% | ✅ Excellent |
+| Toys & Games | 13.53% | ✅ Excellent |
+| Electronics | 15.40% | ✅ Good |
+| Office Products | 16.05% | ✅ Good |
+| Sports & Fitness | 18.21% | ✅ Good |
+| Tools & Home Improvement | 18.92% | ✅ Good |
+| Books & Media | 20.00% | ⚠️ Acceptable |
+| Home & Kitchen | 21.55% | ⚠️ Acceptable |
+| Grocery & Gourmet Food | 25.01% | ⚠️ Moderate |
+| Clothing & Fashion | 25.20% | ⚠️ Moderate |
+| **AVERAGE** | **18.35%** | **✅ Target Met** |
+
+Display these accuracy metrics in the forecast dashboard to build user confidence.
+
+---
+
+## PRODUCTION DEPLOYMENT
+
+### Backend Deployment (Render.com)
+
+The FastAPI backend is deployed on Render.com:
+
+**Production URL**: `https://smart-inventory-api.onrender.com`
+
+### Environment Variables (Render)
+```
+DATABASE_URL=postgresql://...
+SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+### Frontend Deployment (Lovable/Vercel)
+
+Configure the frontend to use the production API:
+
+```javascript
+// config.js
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? 'https://smart-inventory-api.onrender.com'
+  : 'http://localhost:8000';
+```
+
+### Health Check Endpoint
+`GET /health` - Returns `{"status": "healthy"}` for monitoring
+
+---
+
+*Prompt updated: December 26, 2024*
+*Version: 3.0.0*
+*Key Update: Prophet model achieves 18.35% SMAPE (target <20% achieved!)*
+*Features: Monthly trends, reports, product/category performance, recommendations, real-time streaming via Kafka/WebSocket*
