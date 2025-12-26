@@ -13,6 +13,7 @@ passlib[bcrypt]==1.7.4
 
 # Data Processing
 pydantic==2.10.3
+pydantic-settings>=2.0.0
 pandas>=2.2.0
 numpy>=1.24.0
 
