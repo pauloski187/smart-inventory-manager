@@ -8,9 +8,9 @@
 
 Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides **Prophet-based demand forecasting** with **18.35% SMAPE** (verified), ABC analysis, comprehensive reporting, and inventory recommendations.
 
-**Backend API Base URL**: `https://smart-inventory-api.onrender.com` (Production)
+**Backend API Base URL**: `https://smart-inventory-manager-7kt7.onrender.com` (Production)
 **Local Development**: `http://localhost:8000`
-**API Documentation**: `https://smart-inventory-api.onrender.com/docs`
+**API Documentation**: `https://smart-inventory-manager-7kt7.onrender.com/docs`
 
 ### Key ML Achievement
 | Metric | Value |
@@ -846,7 +846,7 @@ Display these accuracy metrics in the forecast dashboard to build user confidenc
 
 The FastAPI backend is deployed on Render.com:
 
-**Production URL**: `https://smart-inventory-api.onrender.com`
+**Production URL**: `https://smart-inventory-manager-7kt7.onrender.com`
 
 ### Environment Variables (Render)
 ```
@@ -863,7 +863,7 @@ Configure the frontend to use the production API:
 ```javascript
 // config.js
 const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://smart-inventory-api.onrender.com'
+  ? 'https://smart-inventory-manager-7kt7.onrender.com'
   : 'http://localhost:8000';
 ```
 
