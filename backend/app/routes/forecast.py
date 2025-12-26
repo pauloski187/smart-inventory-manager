@@ -1,16 +1,17 @@
 """
-SARIMA Forecast API Endpoints
+Forecast API Endpoints
 
 Provides endpoints for:
 - Data upload and validation
 - SARIMA demand forecasting by category
+- Hybrid Ensemble forecasting (SARIMA + Prophet + LSTM)
 - Inventory recommendations
 - Model retraining
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 import pandas as pd
@@ -20,11 +21,20 @@ import logging
 from ..database import get_db
 from ..ml.sarima_forecaster import CategoryForecaster, load_and_prepare_data, MODEL_DIR
 
+# Try to import ensemble forecaster (may fail if dependencies not installed)
+try:
+    from ..ml.ensemble_forecaster import EnsembleForecaster, CategoryEnsembleForecaster
+    ENSEMBLE_AVAILABLE = True
+except ImportError:
+    ENSEMBLE_AVAILABLE = False
+    logging.warning("Ensemble forecaster not available. Install prophet and tensorflow.")
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Global forecaster instance (will be initialized with data)
+# Global forecaster instances
 _forecaster: Optional[CategoryForecaster] = None
+_ensemble_forecaster: Optional['CategoryEnsembleForecaster'] = None
 
 
 # ==================== Response Models ====================
@@ -448,3 +458,309 @@ async def get_model_status():
             status_code=500,
             detail=f"Error checking models: {str(e)}"
         )
+
+
+# ==================== Ensemble Forecasting Endpoints ====================
+
+class EnsembleWeights(BaseModel):
+    sarima: float
+    prophet: float
+    lstm: float
+
+
+class EnsembleForecastResponse(BaseModel):
+    category: str
+    forecast: List[float]
+    lower_bound: List[float]
+    upper_bound: List[float]
+    weights: EnsembleWeights
+    horizon_weeks: int
+    model_type: str = "ensemble"
+
+
+class EnsembleTrainResponse(BaseModel):
+    success: bool
+    message: str
+    categories_trained: int
+    results: List[Dict[str, Any]]
+
+
+@router.get("/ensemble/status")
+async def get_ensemble_status():
+    """
+    Check if ensemble forecasting is available.
+
+    Returns availability status and installed dependencies.
+    """
+    return {
+        "ensemble_available": ENSEMBLE_AVAILABLE,
+        "models": ["SARIMA", "Prophet", "LSTM"] if ENSEMBLE_AVAILABLE else [],
+        "message": "Ensemble forecasting ready" if ENSEMBLE_AVAILABLE else "Install prophet and tensorflow for ensemble forecasting"
+    }
+
+
+@router.post("/ensemble/train", response_model=EnsembleTrainResponse)
+async def train_ensemble_models(
+    file: UploadFile = File(...),
+    validation_weeks: int = Query(8, ge=4, le=16, description="Weeks for weight optimization")
+):
+    """
+    Train hybrid ensemble models (SARIMA + Prophet + LSTM) for all categories.
+
+    The ensemble uses intelligent weight optimization:
+    1. Each model is validated on a holdout period
+    2. Weights are assigned inversely proportional to validation SMAPE
+    3. Better performing models get higher weights
+
+    Target: SMAPE < 20%
+    """
+    if not ENSEMBLE_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Ensemble forecasting not available. Install: pip install prophet tensorflow"
+        )
+
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+
+        # Validate columns
+        is_valid, missing = validate_csv_columns(df)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {missing}"
+            )
+
+        # Prepare data
+        df = load_and_prepare_data(io.StringIO(contents.decode('utf-8')))
+
+        # Initialize and train ensemble
+        global _ensemble_forecaster
+        _ensemble_forecaster = CategoryEnsembleForecaster(validation_size=validation_weeks)
+        _ensemble_forecaster.fit_all_categories(
+            df,
+            date_col='OrderDate' if 'OrderDate' in df.columns else 'order_date',
+            category_col='Category' if 'Category' in df.columns else 'category',
+            value_col='Quantity' if 'Quantity' in df.columns else 'quantity'
+        )
+
+        # Get summary
+        summary = _ensemble_forecaster.get_summary()
+        successful = len(summary[summary['status'] == 'success'])
+
+        results = []
+        for _, row in summary.iterrows():
+            if row['status'] == 'success':
+                results.append({
+                    'category': row['category'],
+                    'weights': {
+                        'sarima': round(row['sarima_weight'], 3),
+                        'prophet': round(row['prophet_weight'], 3),
+                        'lstm': round(row['lstm_weight'], 3)
+                    },
+                    'data_points': row['data_points'],
+                    'status': 'success'
+                })
+            else:
+                results.append({
+                    'category': row['category'],
+                    'status': 'failed'
+                })
+
+        return EnsembleTrainResponse(
+            success=True,
+            message=f"Trained ensemble models for {successful} categories",
+            categories_trained=successful,
+            results=results
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error training ensemble: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error training ensemble models: {str(e)}"
+        )
+
+
+@router.get("/ensemble/forecast/{category}", response_model=EnsembleForecastResponse)
+async def get_ensemble_forecast(
+    category: str,
+    weeks: int = Query(4, ge=1, le=52, description="Forecast horizon in weeks")
+):
+    """
+    Get hybrid ensemble forecast for a specific category.
+
+    Combines SARIMA, Prophet, and LSTM predictions using optimized weights.
+    Returns weekly forecasts with confidence intervals.
+    """
+    if not ENSEMBLE_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Ensemble forecasting not available"
+        )
+
+    global _ensemble_forecaster
+    if _ensemble_forecaster is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No ensemble models trained. Use /ensemble/train first."
+        )
+
+    try:
+        result = _ensemble_forecaster.predict_category(category, steps=weeks)
+
+        return EnsembleForecastResponse(
+            category=result['category'],
+            forecast=result['forecast'],
+            lower_bound=result['lower_bound'],
+            upper_bound=result['upper_bound'],
+            weights=EnsembleWeights(**result['weights']),
+            horizon_weeks=result['horizon_weeks']
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating ensemble forecast: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating forecast: {str(e)}"
+        )
+
+
+@router.get("/ensemble/forecasts/all")
+async def get_all_ensemble_forecasts(
+    weeks: int = Query(4, ge=1, le=52)
+):
+    """
+    Get ensemble forecasts for all trained categories.
+
+    Returns forecasts with model weights for each category.
+    """
+    if not ENSEMBLE_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Ensemble forecasting not available"
+        )
+
+    global _ensemble_forecaster
+    if _ensemble_forecaster is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No ensemble models trained. Use /ensemble/train first."
+        )
+
+    try:
+        results = []
+        for category in _ensemble_forecaster.forecasters.keys():
+            try:
+                result = _ensemble_forecaster.predict_category(category, steps=weeks)
+                results.append({
+                    'category': result['category'],
+                    'forecast_total': sum(result['forecast']),
+                    'weekly_forecast': result['forecast'],
+                    'weights': result['weights']
+                })
+            except Exception as e:
+                results.append({
+                    'category': category,
+                    'error': str(e)
+                })
+
+        return {
+            'generated_at': datetime.now().isoformat(),
+            'horizon_weeks': weeks,
+            'categories': results
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating ensemble forecasts: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating forecasts: {str(e)}"
+        )
+
+
+@router.get("/ensemble/weights")
+async def get_ensemble_weights():
+    """
+    Get optimized weights for all trained ensemble models.
+
+    Shows how much each model (SARIMA, Prophet, LSTM) contributes
+    to the final forecast for each category.
+    """
+    global _ensemble_forecaster
+    if _ensemble_forecaster is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No ensemble models trained"
+        )
+
+    summary = _ensemble_forecaster.get_summary()
+
+    return {
+        'categories': summary.to_dict(orient='records'),
+        'average_weights': {
+            'sarima': summary['sarima_weight'].mean(),
+            'prophet': summary['prophet_weight'].mean(),
+            'lstm': summary['lstm_weight'].mean()
+        }
+    }
+
+
+@router.get("/ensemble/compare/{category}")
+async def compare_models(
+    category: str,
+    weeks: int = Query(4, ge=1, le=12)
+):
+    """
+    Compare SARIMA-only forecast vs Ensemble forecast for a category.
+
+    Useful for evaluating ensemble improvement over single models.
+    """
+    if not ENSEMBLE_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Ensemble forecasting not available"
+        )
+
+    results = {
+        'category': category,
+        'horizon_weeks': weeks
+    }
+
+    # Get SARIMA forecast
+    try:
+        forecaster = get_forecaster()
+        sarima_result = forecaster.forecast_category(category, horizons=[weeks * 7])
+        horizon_key = f'{weeks * 7}_day'
+        if 'forecasts' in sarima_result and horizon_key in sarima_result['forecasts']:
+            results['sarima'] = {
+                'total_forecast': sarima_result['forecasts'][horizon_key]['total_forecast'],
+                'model': 'SARIMA only'
+            }
+    except Exception as e:
+        results['sarima'] = {'error': str(e)}
+
+    # Get Ensemble forecast
+    global _ensemble_forecaster
+    if _ensemble_forecaster:
+        try:
+            ensemble_result = _ensemble_forecaster.predict_category(category, steps=weeks)
+            results['ensemble'] = {
+                'total_forecast': sum(ensemble_result['forecast']),
+                'weights': ensemble_result['weights'],
+                'model': 'SARIMA + Prophet + LSTM'
+            }
+        except Exception as e:
+            results['ensemble'] = {'error': str(e)}
+    else:
+        results['ensemble'] = {'error': 'Ensemble not trained'}
+
+    return results
