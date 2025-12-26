@@ -1,0 +1,12 @@
+# Core
+gradio>=4.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Forecasting Models
+statsmodels>=0.14.0
+prophet>=1.1.5
+
+# Utilities
+scipy>=1.11.0
+scikit-learn>=1.3.0
