@@ -21,11 +21,38 @@ logger = logging.getLogger(__name__)
 Base.metadata.create_all(bind=engine)
 
 
+def seed_database_if_empty():
+    """Check if database is empty and seed with initial data."""
+    from .database import SessionLocal
+    from .models.order import Order
+
+    db = SessionLocal()
+    try:
+        order_count = db.query(Order).count()
+        if order_count == 0:
+            logger.info("Database is empty. Seeding with initial data...")
+            from .seed_database import seed_database
+            success = seed_database()
+            if success:
+                logger.info("Database seeded successfully!")
+            else:
+                logger.warning("Database seeding failed. Dashboard may be empty.")
+        else:
+            logger.info(f"Database already has {order_count} orders. Skipping seed.")
+    except Exception as e:
+        logger.warning(f"Error checking/seeding database: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events."""
     # Startup
     logger.info("Starting Smart Inventory Manager...")
+
+    # Seed database if empty
+    seed_database_if_empty()
 
     # Initialize Kafka producer if enabled
     if config.kafka_enabled:
