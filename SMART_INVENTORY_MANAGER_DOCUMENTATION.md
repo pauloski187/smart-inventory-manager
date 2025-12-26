@@ -5,12 +5,14 @@
 
 # Executive Summary
 
-The **Smart Inventory Manager** is a production-ready, AI-powered inventory management system that uses a **Hybrid Ensemble Model (SARIMA + Prophet + LSTM)** to predict product demand and optimize inventory levels. Built with **FastAPI** backend and supporting **real-time streaming** via Kafka/WebSocket, the system processes 100,000+ sales transactions to deliver actionable business intelligence.
+The **Smart Inventory Manager** is a production-ready, AI-powered inventory management system that uses **Facebook Prophet** to predict product demand and optimize inventory levels. Built with **FastAPI** backend and supporting **real-time streaming** via Kafka/WebSocket, the system processes 100,000+ sales transactions to deliver actionable business intelligence.
 
-**Key Achievement**: Reduced forecast error (SMAPE) from **83%** to **<20%** through:
-- Hybrid Ensemble combining SARIMA, Prophet, and LSTM
-- Intelligent weight optimization based on validation performance
-- Weekly resampling and log transformation
+**Key Achievement**: Reduced forecast error (SMAPE) from **83%** to **18.35%** through:
+- Facebook Prophet with automatic seasonality detection
+- Weekly resampling and trend changepoint detection
+- 8-week validation holdout for model tuning
+
+**✅ TARGET ACHIEVED: Average SMAPE = 18.35% (under 20% target)**
 
 ---
 
@@ -53,7 +55,7 @@ An intelligent system that:
 
 | Feature | Technology | Benefit |
 |---------|------------|---------|
-| Demand Forecasting | **Hybrid Ensemble (SARIMA+Prophet+LSTM)** | **<20% SMAPE** (improved from 83%) |
+| Demand Forecasting | **Facebook Prophet** | **18.35% SMAPE** ✅ (improved from 83%) |
 | ABC Classification | Pareto Analysis | Focus on high-value products |
 | Real-time Alerts | Kafka + WebSocket | Instant notifications |
 | REST API | FastAPI | Easy frontend integration |

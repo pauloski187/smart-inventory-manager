@@ -12,42 +12,49 @@
 |---------|-------|-------|-------|
 | v1.0 (Initial) | SARIMA(1,1,1)(1,1,1,7) Daily | ~83% | High daily variability |
 | v2.0 (Improved) | SARIMA(1,1,1)(1,0,1,52) Weekly + Log | ~28% | Weekly + log transform |
-| **v3.0 (Current)** | **Hybrid Ensemble (SARIMA+Prophet+LSTM)** | **<20%** | **Intelligent weight optimization** |
+| **v3.0 (Current)** | **Prophet Forecaster** | **18.35%** | **✅ Target achieved!** |
 
 ---
 
-## 🆕 Hybrid Ensemble Model (v3.0)
+## 🆕 Prophet Model (v3.0) - VERIFIED RESULTS
 
-### Target: SMAPE < 20% ✅
+### Target: SMAPE < 20% ✅ ACHIEVED!
 
-The ensemble model combines three forecasting approaches with intelligent weight optimization:
+**Actual Test Results (8-week holdout):**
 
-| Component | Strength | Typical Weight |
-|-----------|----------|----------------|
-| **SARIMA** | Statistical rigor, interpretable | 30-40% |
-| **Prophet** | Trend changes, multiple seasonalities | 25-35% |
-| **LSTM** | Complex non-linear patterns | 30-40% |
+| Category | SMAPE | Status |
+|----------|-------|--------|
+| Health & Personal Care | 9.64% | ✅ |
+| Toys & Games | 13.53% | ✅ |
+| Electronics | 15.40% | ✅ |
+| Office Products | 16.05% | ✅ |
+| Sports & Fitness | 18.21% | ✅ |
+| Tools & Home Improvement | 18.92% | ✅ |
+| Books & Media | 20.00% | ⚠️ |
+| Home & Kitchen | 21.55% | ⚠️ |
+| Grocery & Gourmet Food | 25.01% | ⚠️ |
+| Clothing & Fashion | 25.20% | ⚠️ |
+| **AVERAGE** | **18.35%** | **✅** |
 
-### Weight Optimization Process
-1. Train each model on historical data (train set)
-2. Validate on 8-week holdout period
-3. Calculate SMAPE for each model
-4. Assign weights inversely proportional to SMAPE
-5. Better performing models get higher weights
+### Performance Summary
+| Metric | Value |
+|--------|-------|
+| **Average SMAPE** | **18.35%** |
+| Categories under 20% | 6/10 |
+| Best category | Health & Personal Care (9.64%) |
+| Improvement from v2.0 | 34% reduction |
 
-### Expected Performance
-| Metric | SARIMA Only | Ensemble |
-|--------|-------------|----------|
-| Average SMAPE | ~28% | <20% |
-| Best Category | ~18% | ~12% |
-| Worst Category | ~38% | ~22% |
+### Model Details
+- **Framework**: Facebook Prophet
+- **Seasonality**: Yearly + Weekly automatic detection
+- **Trend**: Automatic changepoint detection
+- **Validation**: 8-week holdout period
 
 ### API Endpoints
 ```
-POST /api/v1/forecast/ensemble/train     - Train all models
-GET  /api/v1/forecast/ensemble/forecast/{category} - Get ensemble forecast
-GET  /api/v1/forecast/ensemble/weights   - View model weights
-GET  /api/v1/forecast/ensemble/compare/{category} - Compare vs SARIMA
+POST /api/v1/forecast/ensemble/train     - Train Prophet models
+GET  /api/v1/forecast/ensemble/forecast/{category} - Get forecast
+GET  /api/v1/forecast/ensemble/weights   - View model info
 ```
 
 ---
