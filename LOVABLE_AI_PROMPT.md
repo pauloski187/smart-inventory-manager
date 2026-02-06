@@ -8,9 +8,10 @@
 
 Build a modern, responsive dashboard for a Smart Inventory Management System that connects to an existing FastAPI backend. The system provides **SARIMA-based demand forecasting**, ABC analysis, comprehensive reporting, and inventory recommendations.
 
-**Backend API Base URL**: `https://smart-inventory-manager-7kt7.onrender.com`
+**Backend API Base URL (Production)**: `https://pauloski07-sales-inventory-forecasting.hf.space`
+**Alternative URL**: `https://huggingface.co/spaces/pauloski07/sales-inventory-forecasting`
+**API Documentation**: `https://pauloski07-sales-inventory-forecasting.hf.space/docs`
 **Local Development**: `http://localhost:8000`
-**API Documentation**: `https://smart-inventory-manager-7kt7.onrender.com/docs`
 
 ### Key ML Achievement
 | Metric | Value |
