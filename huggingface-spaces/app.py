@@ -250,11 +250,13 @@ def create_minimal_sample_data(db: Session):
             )
             db.add(product)
 
-    # Create orders
-    start_date = datetime(2023, 1, 1)
+    # Create orders from 2019 to 2024 (6 years of data)
+    start_date = datetime(2019, 1, 1)
+    end_date = datetime(2024, 12, 31)
+    total_days = (end_date - start_date).days + 1
     order_id = 1
 
-    for days in range(365):
+    for days in range(total_days):
         current_date = start_date + timedelta(days=days)
         orders_per_day = np.random.randint(5, 20)
 
@@ -264,11 +266,15 @@ def create_minimal_sample_data(db: Session):
             cost = price * 0.6
             qty = np.random.randint(1, 10)
 
+            # Use varied product names for more realistic data
+            product_index = (order_id % 50)
+            product_name = f"{cat} Product {(product_index % 10) + 1}"
+
             order = Order(
                 id=f"ORD{order_id:06d}",
                 order_date=current_date,
-                product_id=f"P{order_id % 50:03d}",
-                product_name=f"{cat} Product",
+                product_id=f"P{(order_id % 50):03d}",
+                product_name=product_name,
                 category=cat,
                 quantity=qty,
                 unit_price=price,
@@ -281,7 +287,7 @@ def create_minimal_sample_data(db: Session):
             order_id += 1
 
     db.commit()
-    logger.info(f"Created minimal sample data: {order_id} orders")
+    logger.info(f"Created sample data from 2019-2024: {order_id} orders across {total_days} days")
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -319,6 +325,83 @@ def health_check():
         "version": "1.0.0",
         "platform": "huggingface-spaces"
     }
+
+@app.get("/admin/database-status")
+def get_database_status(db: Session = Depends(get_db)):
+    """Check current database status and date range."""
+    try:
+        order_count = db.query(Order).count()
+        product_count = db.query(Product).count()
+
+        if order_count == 0:
+            return {
+                "status": "empty",
+                "products": 0,
+                "orders": 0,
+                "date_range": "No data"
+            }
+
+        # Get date range
+        orders = db.query(Order.order_date).order_by(Order.order_date).all()
+        min_date = min(o.order_date for o in orders).strftime('%Y-%m-%d')
+        max_date = max(o.order_date for o in orders).strftime('%Y-%m-%d')
+
+        # Count orders per year
+        years_count = {}
+        for o in orders:
+            year = o.order_date.year
+            years_count[year] = years_count.get(year, 0) + 1
+
+        return {
+            "status": "populated",
+            "products": product_count,
+            "orders": order_count,
+            "date_range": f"{min_date} to {max_date}",
+            "orders_by_year": years_count
+        }
+    except Exception as e:
+        logger.error(f"Error checking database status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/reseed-database")
+def force_reseed_database(db: Session = Depends(get_db)):
+    """
+    Force re-seed the database with sample data.
+    This will DELETE all existing data and reload from sample_data.csv or create fresh 2019-2024 data.
+    """
+    try:
+        # Delete all existing data
+        db.query(Order).delete()
+        db.query(Product).delete()
+        db.commit()
+        logger.info("Cleared existing database")
+
+        # Re-seed with fresh data
+        seed_database_if_empty(db)
+
+        # Get counts
+        order_count = db.query(Order).count()
+        product_count = db.query(Product).count()
+
+        # Get date range
+        orders = db.query(Order.order_date).order_by(Order.order_date).all()
+        if orders:
+            min_date = min(o.order_date for o in orders).strftime('%Y-%m-%d')
+            max_date = max(o.order_date for o in orders).strftime('%Y-%m-%d')
+        else:
+            min_date = max_date = "N/A"
+
+        return {
+            "status": "success",
+            "message": "Database re-seeded successfully",
+            "products": product_count,
+            "orders": order_count,
+            "date_range": f"{min_date} to {max_date}"
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error re-seeding database: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== Analytics Endpoints ====================
 

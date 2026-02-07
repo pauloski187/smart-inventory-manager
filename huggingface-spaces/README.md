@@ -7,7 +7,7 @@ sdk: docker
 app_file: app.py
 pinned: false
 license: mit
-short_description: Full REST API for inventory management with analytics and forecasting
+short_description: Inventory management API with analytics & forecasting
 ---
 
 # Smart Inventory Manager - Full REST API

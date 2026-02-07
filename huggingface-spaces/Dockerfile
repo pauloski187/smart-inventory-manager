@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install
-COPY requirements-fastapi.txt requirements.txt
+COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY app_fastapi.py app.py
+COPY app.py app.py
 COPY sample_data.csv sample_data.csv
 
 # Create non-root user
