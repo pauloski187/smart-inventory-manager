@@ -189,6 +189,17 @@ def seed_database_if_empty(db: Session):
             'quantity': 'sum'
         }).reset_index()
 
+        # Sample a manageable subset of products for HuggingFace Spaces resource limits
+        # Use stratified sampling to ensure diverse categories
+        max_products = 150
+        if len(product_catalog) > max_products:
+            # Sample proportionally from each category
+            product_catalog = product_catalog.groupby('category', group_keys=False).apply(
+                lambda x: x.sample(min(len(x), max(1, int(max_products * len(x) / len(product_catalog)))),
+                                 random_state=42)
+            ).reset_index(drop=True)
+            logger.info(f"Sampled {len(product_catalog)} products from CSV for resource efficiency")
+
         # Create products in database
         for _, row in product_catalog.iterrows():
             product = Product(
@@ -203,7 +214,7 @@ def seed_database_if_empty(db: Session):
             db.add(product)
 
         db.commit()
-        logger.info(f"Created {len(product_catalog)} products from CSV")
+        logger.info(f"Created {len(product_catalog)} real products from CSV")
 
         # Generate orders from 2019 to 2024 using REAL product names
         start_date = datetime(2019, 1, 1)
