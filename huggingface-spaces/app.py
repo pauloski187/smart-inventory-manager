@@ -382,6 +382,39 @@ def get_database_status(db: Session = Depends(get_db)):
         logger.error(f"Error checking database status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/admin/csv-check")
+def check_csv_file():
+    """Check if sample_data.csv exists and is readable."""
+    try:
+        csv_path = Path(__file__).parent / "sample_data.csv"
+
+        if not csv_path.exists():
+            return {
+                "exists": False,
+                "error": "File not found",
+                "path": str(csv_path),
+                "parent_dir": str(Path(__file__).parent),
+                "parent_files": list(str(f) for f in Path(__file__).parent.iterdir())
+            }
+
+        # Try to read first few rows
+        df = pd.read_csv(csv_path, nrows=2)
+        df.columns = df.columns.str.strip().str.lower()
+
+        return {
+            "exists": True,
+            "size_bytes": csv_path.stat().st_size,
+            "columns": list(df.columns),
+            "sample_row": df.iloc[0].to_dict() if len(df) > 0 else {},
+            "path": str(csv_path)
+        }
+    except Exception as e:
+        return {
+            "exists": csv_path.exists() if 'csv_path' in locals() else False,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
 @app.post("/admin/reseed-database")
 def force_reseed_database(db: Session = Depends(get_db)):
     """
