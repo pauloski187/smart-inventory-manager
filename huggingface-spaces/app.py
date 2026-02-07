@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
+import random
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -190,14 +191,10 @@ def seed_database_if_empty(db: Session):
         }).reset_index()
 
         # Sample a manageable subset of products for HuggingFace Spaces resource limits
-        # Use stratified sampling to ensure diverse categories
         max_products = 150
         if len(product_catalog) > max_products:
-            # Sample proportionally from each category
-            product_catalog = product_catalog.groupby('category', group_keys=False).apply(
-                lambda x: x.sample(min(len(x), max(1, int(max_products * len(x) / len(product_catalog)))),
-                                 random_state=42)
-            ).reset_index(drop=True)
+            # Simple random sampling - more robust than stratified sampling
+            product_catalog = product_catalog.sample(n=max_products, random_state=42).reset_index(drop=True)
             logger.info(f"Sampled {len(product_catalog)} products from CSV for resource efficiency")
 
         # Create products in database
@@ -231,7 +228,7 @@ def seed_database_if_empty(db: Session):
 
             for _ in range(orders_per_day):
                 # Randomly select a REAL product from the catalog
-                product = np.random.choice(products_list)
+                product = random.choice(products_list)
 
                 qty = np.random.randint(1, 10)
                 # Add some price variation (±10%)
@@ -258,8 +255,11 @@ def seed_database_if_empty(db: Session):
         logger.info(f"Generated {order_id} orders from 2019-2024 using {len(products_list)} real products")
 
     except Exception as e:
-        logger.error(f"Error seeding database: {e}")
+        logger.error(f"Error seeding database from CSV: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         db.rollback()
+        logger.info("Falling back to minimal sample data")
         create_minimal_sample_data(db)
 
 def create_minimal_sample_data(db: Session):
