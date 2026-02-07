@@ -118,3 +118,23 @@ dmypy.json
 *.db
 *.sqlite
 *.sqlite3
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+.DS_Store
+package-lock.json
+frontend/package-lock.json
+
+# Vercel
+.vercel
+
+# Local env files
+.env.local
+.env*.local
+frontend/.env.local
+
+# Misc
+LOVABLE_AI_PROMPT_V2_ACCURATE.md
