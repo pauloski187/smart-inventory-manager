@@ -159,7 +159,7 @@ def seed_database_if_empty(db: Session):
         return
 
     try:
-        # Load sample data
+        # Load sample data to get real product names
         df = pd.read_csv(csv_path)
         df.columns = df.columns.str.strip().str.lower()
 
@@ -181,51 +181,70 @@ def seed_database_if_empty(db: Session):
         # Add missing columns with defaults
         if 'unit_cost' not in df.columns:
             df['unit_cost'] = df.get('unit_price', 0) * 0.6  # 60% cost
-        if 'total_revenue' not in df.columns:
-            df['total_revenue'] = df['quantity'] * df['unit_price']
-        if 'total_profit' not in df.columns:
-            df['total_profit'] = df['quantity'] * (df['unit_price'] - df['unit_cost'])
-        if 'status' not in df.columns:
-            df['status'] = 'Delivered'
 
-        # Create products
-        products = df.groupby(['product_id', 'product_name', 'category']).agg({
+        # Extract unique products with their details
+        product_catalog = df.groupby(['product_id', 'product_name', 'category']).agg({
             'unit_price': 'mean',
             'unit_cost': 'mean',
             'quantity': 'sum'
         }).reset_index()
 
-        for _, row in products.iterrows():
+        # Create products in database
+        for _, row in product_catalog.iterrows():
             product = Product(
                 id=str(row['product_id']),
                 name=str(row['product_name']),
                 category=str(row['category']),
                 price=float(row['unit_price']),
                 cost=float(row['unit_cost']),
-                current_stock=int(row['quantity'] * 0.3),  # 30% of sold as stock
-                reorder_threshold=max(10, int(row['quantity'] * 0.05))
+                current_stock=np.random.randint(20, 150),
+                reorder_threshold=np.random.randint(10, 30)
             )
             db.add(product)
 
-        # Create orders
-        for idx, row in df.iterrows():
-            order = Order(
-                id=f"ORD{idx:06d}",
-                order_date=row['order_date'],
-                product_id=str(row['product_id']),
-                product_name=str(row['product_name']),
-                category=str(row['category']),
-                quantity=int(row['quantity']),
-                unit_price=float(row['unit_price']),
-                unit_cost=float(row.get('unit_cost', row['unit_price'] * 0.6)),
-                total_revenue=float(row['total_revenue']),
-                total_profit=float(row['total_profit']),
-                status=str(row.get('status', 'Delivered'))
-            )
-            db.add(order)
+        db.commit()
+        logger.info(f"Created {len(product_catalog)} products from CSV")
+
+        # Generate orders from 2019 to 2024 using REAL product names
+        start_date = datetime(2019, 1, 1)
+        end_date = datetime(2024, 12, 31)
+        total_days = (end_date - start_date).days + 1
+        order_id = 1
+
+        # Convert product catalog to list for random selection
+        products_list = product_catalog.to_dict('records')
+
+        for days in range(total_days):
+            current_date = start_date + timedelta(days=days)
+            orders_per_day = np.random.randint(5, 20)
+
+            for _ in range(orders_per_day):
+                # Randomly select a REAL product from the catalog
+                product = np.random.choice(products_list)
+
+                qty = np.random.randint(1, 10)
+                # Add some price variation (±10%)
+                price = float(product['unit_price']) * np.random.uniform(0.9, 1.1)
+                cost = float(product['unit_cost']) * np.random.uniform(0.9, 1.1)
+
+                order = Order(
+                    id=f"ORD{order_id:06d}",
+                    order_date=current_date,
+                    product_id=str(product['product_id']),
+                    product_name=str(product['product_name']),  # REAL product name from CSV
+                    category=str(product['category']),
+                    quantity=qty,
+                    unit_price=price,
+                    unit_cost=cost,
+                    total_revenue=price * qty,
+                    total_profit=(price - cost) * qty,
+                    status="Delivered"
+                )
+                db.add(order)
+                order_id += 1
 
         db.commit()
-        logger.info(f"Seeded database with {len(products)} products and {len(df)} orders")
+        logger.info(f"Generated {order_id} orders from 2019-2024 using {len(products_list)} real products")
 
     except Exception as e:
         logger.error(f"Error seeding database: {e}")
